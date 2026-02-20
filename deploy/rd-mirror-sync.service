@@ -1,0 +1,16 @@
+[Unit]
+Description=Real-Debrid one-way mirror sync
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/rd-mirror-sync
+EnvironmentFile=/opt/rd-mirror-sync/.env
+ExecStart=/opt/rd-mirror-sync/rd-mirror-sync
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
