@@ -104,8 +104,9 @@ func (c *Client) DeleteTorrent(ctx context.Context, token, torrentID string) err
 	return c.deleteWithRetry(ctx, token, c.baseURL+"/torrents/delete/"+url.PathEscape(torrentID))
 }
 
-// doRequest runs a single attempt: build request via mkReq, set Auth, Do, check status, decode or discard body.
-// out non-nil means decode response JSON into out; out nil means discard body.
+// doRequest performs an HTTP request with retries via withRetry.
+// On each attempt it builds the request via mkReq, sets Authorization, executes it, checks status, then decodes or discards the body.
+// If out is non-nil, the response JSON is decoded into out; if out is nil, the body is discarded (read to EOF so the connection can be reused).
 func (c *Client) doRequest(ctx context.Context, token, op string, mkReq func() (*http.Request, error), out any) error {
 	return c.withRetry(ctx, op, func() error {
 		req, err := mkReq()
@@ -129,7 +130,9 @@ func (c *Client) doRequest(ctx context.Context, token, op string, mkReq func() (
 				return retryable(err)
 			}
 		} else {
-			io.Copy(io.Discard, resp.Body)
+			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+				return retryable(err)
+			}
 		}
 		return nil
 	})

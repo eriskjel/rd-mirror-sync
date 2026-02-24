@@ -1,3 +1,16 @@
+## rd-mirror-sync v1.0.2
+
+### Fixes and improvements (RD API client)
+- **Timer leak fix:** Retry backoff in the API client now uses `time.NewTimer` instead of `time.After`, so timers are stopped on context cancel and no longer leak under load.
+- **DRY HTTP handling:** Request execution, auth, status handling, and body decode/discard are centralized in a `doRequest` helper; GET/POST/DELETE helpers now use it.
+- **Body discard errors:** When discarding a response body (e.g. selectFiles, delete), read errors are now returned as retryable instead of ignored, so connection reuse and failures are handled correctly.
+- **Form encode once:** POST form bodies are encoded once before the retry loop instead of on every attempt.
+- **Docs:** `doRequest` comment updated to describe retry behavior.
+
+Same install and config as v1.0.1.
+
+---
+
 ## rd-mirror-sync v1.0.1
 
 ### Fix
