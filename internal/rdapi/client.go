@@ -104,110 +104,74 @@ func (c *Client) DeleteTorrent(ctx context.Context, token, torrentID string) err
 	return c.deleteWithRetry(ctx, token, c.baseURL+"/torrents/delete/"+url.PathEscape(torrentID))
 }
 
-func (c *Client) getJSONWithRetry(ctx context.Context, token, endpoint string, out any) error {
-	return c.withRetry(ctx, "GET "+endpoint, func() error {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+// doRequest performs an HTTP request with retries via withRetry.
+// On each attempt it builds the request via mkReq, sets Authorization, executes it, checks status, then decodes or discards the body.
+// If out is non-nil, the response JSON is decoded into out; if out is nil, the body is discarded (read to EOF so the connection can be reused).
+func (c *Client) doRequest(ctx context.Context, token, op string, mkReq func() (*http.Request, error), out any) error {
+	return c.withRetry(ctx, op, func() error {
+		req, err := mkReq()
 		if err != nil {
 			return err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			return retryable(err)
 		}
 		defer resp.Body.Close()
-
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			return retryable(fmt.Errorf("status=%d", resp.StatusCode))
 		}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			return fmt.Errorf("status=%d", resp.StatusCode)
 		}
-		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-			return retryable(err)
+		if out != nil {
+			if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+				return retryable(err)
+			}
+		} else {
+			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+				return retryable(err)
+			}
 		}
 		return nil
 	})
+}
+
+func (c *Client) getJSONWithRetry(ctx context.Context, token, endpoint string, out any) error {
+	return c.doRequest(ctx, token, "GET "+endpoint, func() (*http.Request, error) {
+		return http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	}, out)
 }
 
 func (c *Client) postFormJSONWithRetry(ctx context.Context, token, endpoint string, form url.Values, out any) error {
-	return c.withRetry(ctx, "POST "+endpoint, func() error {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	encodedForm := form.Encode()
+	return c.doRequest(ctx, token, "POST "+endpoint, func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(encodedForm))
 		if err != nil {
-			return err
+			return nil, err
 		}
-		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			return retryable(err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-			return retryable(fmt.Errorf("status=%d", resp.StatusCode))
-		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return fmt.Errorf("status=%d", resp.StatusCode)
-		}
-		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-			return retryable(err)
-		}
-		return nil
-	})
+		return req, nil
+	}, out)
 }
 
 func (c *Client) postFormNoBodyWithRetry(ctx context.Context, token, endpoint string, form url.Values) error {
-	return c.withRetry(ctx, "POST "+endpoint, func() error {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	encodedForm := form.Encode()
+	return c.doRequest(ctx, token, "POST "+endpoint, func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(encodedForm))
 		if err != nil {
-			return err
+			return nil, err
 		}
-		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			return retryable(err)
-		}
-		defer resp.Body.Close()
-		io.Copy(io.Discard, resp.Body)
-
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-			return retryable(fmt.Errorf("status=%d", resp.StatusCode))
-		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return fmt.Errorf("status=%d", resp.StatusCode)
-		}
-		return nil
-	})
+		return req, nil
+	}, nil)
 }
 
 func (c *Client) deleteWithRetry(ctx context.Context, token, endpoint string) error {
-	return c.withRetry(ctx, "DELETE "+endpoint, func() error {
-		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			return retryable(err)
-		}
-		defer resp.Body.Close()
-		io.Copy(io.Discard, resp.Body)
-
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-			return retryable(fmt.Errorf("status=%d", resp.StatusCode))
-		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return fmt.Errorf("status=%d", resp.StatusCode)
-		}
-		return nil
-	})
+	return c.doRequest(ctx, token, "DELETE "+endpoint, func() (*http.Request, error) {
+		return http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
+	}, nil)
 }
 
 type retryErr struct{ err error }
@@ -234,11 +198,14 @@ func (c *Client) withRetry(ctx context.Context, op string, fn func() error) erro
 
 		backoff := c.cfg.RetryBase * time.Duration(1<<(attempt-1))
 		wait := backoff + c.randomJitter(c.cfg.RetryMaxJitter)
+		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
-		case <-time.After(wait):
+		case <-timer.C:
 		}
+		timer.Stop()
 	}
 	return fmt.Errorf("%s failed after retries: %w", op, last)
 }
