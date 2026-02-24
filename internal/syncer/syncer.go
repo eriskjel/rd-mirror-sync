@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"regexp"
 	"sort"
@@ -144,7 +145,7 @@ func (r *Runner) RunOnce(ctx context.Context) (Stats, error) {
 			log.Printf("add failed hash=%s name=%q err=%v", h, srcT.Filename, err)
 			continue
 		}
-		if err := r.api.SelectFilesAll(ctx, r.cfg.DstToken, newID); err != nil {
+		if err := selectFilesWithRetry(ctx, r.api, r.cfg.DstToken, newID, 2*time.Second, 3, 3*time.Second); err != nil {
 			stats.AddErrors++
 			log.Printf("select files failed id=%s hash=%s name=%q err=%v", newID, h, srcT.Filename, err)
 			continue
@@ -184,6 +185,43 @@ func (r *Runner) RunOnce(ctx context.Context) (Stats, error) {
 
 	stats.FinishedAt = time.Now()
 	return stats, nil
+}
+
+// selectFilesWithRetry calls SelectFilesAll after an initial delay, then retries on failure.
+// Real-Debrid often needs a few seconds after addMagnet before the torrent is ready for file selection.
+func selectFilesWithRetry(ctx context.Context, api API, token, torrentID string, initialDelay time.Duration, maxAttempts int, retryDelay time.Duration) error {
+	sleep := func(d time.Duration) error {
+		timer := time.NewTimer(d)
+		defer timer.Stop()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			return nil
+		}
+	}
+
+	if err := sleep(initialDelay); err != nil {
+		return err
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			log.Printf("select files pending, waiting to retry id=%s attempt=%d/%d last_err=%v", torrentID, attempt+1, maxAttempts, lastErr)
+			if err := sleep(retryDelay); err != nil {
+				return err
+			}
+		}
+
+		lastErr = api.SelectFilesAll(ctx, token, torrentID)
+		if lastErr == nil {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
 func normalizeHash(h string) string {
