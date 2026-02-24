@@ -209,7 +209,7 @@ func selectFilesWithRetry(ctx context.Context, api API, token, torrentID string,
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
-			log.Printf("retrying select files id=%s attempt=%d/%d after delay", torrentID, attempt+1, maxAttempts)
+			log.Printf("select files pending, waiting to retry id=%s attempt=%d/%d last_err=%v", torrentID, attempt+1, maxAttempts, lastErr)
 			if err := sleep(retryDelay); err != nil {
 				return err
 			}
