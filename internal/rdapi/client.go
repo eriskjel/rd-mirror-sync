@@ -15,6 +15,14 @@ import (
 	"time"
 )
 
+// isEOF reports whether err is (or wraps) an unexpected end-of-stream from
+// Real-Debrid. RD drops the TCP connection instead of returning an empty JSON
+// array when a page request falls exactly on a page boundary (e.g. 500
+// torrents with PAGE_LIMIT=250 triggers an EOF on page 3).
+func isEOF(err error) bool {
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+}
+
 type ClientConfig struct {
 	BaseURL        string
 	HTTPTimeout    time.Duration
@@ -68,6 +76,11 @@ func (c *Client) ListAllTorrents(ctx context.Context, token string) ([]Torrent, 
 
 		var batch []Torrent
 		if err := c.getJSONWithRetry(ctx, token, u.String(), &batch); err != nil {
+			// RD drops the connection instead of returning [] when a page
+			// request lands exactly on a page boundary. Treat as end-of-list.
+			if page > 1 && isEOF(err) {
+				break
+			}
 			return nil, fmt.Errorf("list torrents page=%d: %w", page, err)
 		}
 		if len(batch) == 0 {
@@ -176,8 +189,9 @@ func (c *Client) deleteWithRetry(ctx context.Context, token, endpoint string) er
 
 type retryErr struct{ err error }
 
-func (e retryErr) Error() string { return e.err.Error() }
-func retryable(err error) error  { return retryErr{err: err} }
+func (e retryErr) Error() string  { return e.err.Error() }
+func (e retryErr) Unwrap() error  { return e.err }
+func retryable(err error) error   { return retryErr{err: err} }
 
 func isRetryable(err error) bool {
 	var re retryErr
