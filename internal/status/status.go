@@ -59,9 +59,6 @@ func (s *State) Handler(interval time.Duration) http.Handler {
 		if !s.lastSuccessAt.IsZero() && interval > 0 && time.Since(s.lastSuccessAt) > 2*interval {
 			healthy = false
 		}
-		if !healthy {
-			w.WriteHeader(http.StatusServiceUnavailable)
-		}
 
 		resp := map[string]any{
 			"healthy":         healthy,
