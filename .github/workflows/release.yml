@@ -1,0 +1,40 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o dist/rd-mirror-sync-linux-amd64 ./cmd/rd-mirror-sync/
+          GOOS=linux GOARCH=arm64 go build -o dist/rd-mirror-sync-linux-arm64 ./cmd/rd-mirror-sync/
+
+      - name: Checksums
+        run: sha256sum dist/rd-mirror-sync-linux-amd64 dist/rd-mirror-sync-linux-arm64 > dist/checksums.txt
+
+      - name: Release
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes-file RELEASE_NOTES.md \
+            dist/rd-mirror-sync-linux-amd64 \
+            dist/rd-mirror-sync-linux-arm64 \
+            dist/checksums.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
