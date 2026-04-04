@@ -50,7 +50,6 @@ func TestResolveDefaults(t *testing.T) {
 }
 
 func TestResolvePerDestinationOverrides(t *testing.T) {
-	dryRunTrue := true
 	writeConfig(t, `{
 		"src_token": "src",
 		"mode": "add-only",
@@ -77,7 +76,6 @@ func TestResolvePerDestinationOverrides(t *testing.T) {
 		t.Errorf("stavanger: expected dry_run=false")
 	}
 
-	_ = dryRunTrue
 	brother := cfg.Destinations[1]
 	if brother.Mode != syncer.ModeMirrorDelete {
 		t.Errorf("brother mode: got %s, want mirror-delete", brother.Mode)

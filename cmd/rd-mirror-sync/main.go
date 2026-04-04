@@ -19,7 +19,7 @@ import (
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("config error: %v", err)
+		log.Fatalf("config error: %v (expected a JSON config file at ./config.json or a path set via CONFIG_FILE)", err)
 	}
 
 	api := rdapi.NewClient(rdapi.ClientConfig{

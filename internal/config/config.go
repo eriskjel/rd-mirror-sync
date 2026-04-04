@@ -219,7 +219,7 @@ func durationOr(s string, def time.Duration) time.Duration {
 		return def
 	}
 	d, err := time.ParseDuration(s)
-	if err != nil || d <= 0 {
+	if err != nil || d < 0 {
 		return def
 	}
 	return d
