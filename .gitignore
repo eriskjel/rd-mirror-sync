@@ -1,3 +1,4 @@
 .env
-rd-mirror-sync
+config.json
+/rd-mirror-sync
 dist/

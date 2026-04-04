@@ -1,0 +1,28 @@
+{
+  "health_addr": ":8099",
+
+  "mode": "add-only",
+  "dry_run": true,
+
+  "interval": "1m",
+  "run_timeout": "10m",
+  "http_timeout": "20s",
+  "write_delay": "250ms",
+
+  "max_retries": 4,
+  "retry_base": "500ms",
+  "retry_max_jitter": "350ms",
+  "page_limit": 250,
+
+  "destinations": [
+    {
+      "name": "location-1"
+    },
+    {
+      "name": "location-2",
+      "mode": "add-only",
+      "dry_run": true,
+      "enabled": false
+    }
+  ]
+}
