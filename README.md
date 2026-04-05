@@ -27,12 +27,12 @@ cp config.example.json /opt/rd-mirror-sync/config.json
 SRC_RD_TOKEN=your_source_token
 
 # One entry per destination — name must match config.json
-RD_TOKEN_STAVANGER=your_destination_token
-RD_TOKEN_BROTHER=brothers_token
+RD_TOKEN_LOCATION_1=your_destination_token
+RD_TOKEN_LOCATION_2=another_destination_token
 ```
 
 The env var name is derived from the destination `name` in config.json:
-`stavanger` → `RD_TOKEN_STAVANGER`, `location-1` → `RD_TOKEN_LOCATION_1`
+`location-1` → `RD_TOKEN_LOCATION_1`, `my place` → `RD_TOKEN_MY_PLACE`
 
 ### 3. Run
 
@@ -52,8 +52,8 @@ Or via systemd — see [systemd](#systemd) below.
   "interval": "1m",
 
   "destinations": [
-    { "name": "stavanger" },
-    { "name": "brother", "mode": "add-only", "dry_run": true, "enabled": false }
+    { "name": "location-1" },
+    { "name": "location-2", "mode": "add-only", "dry_run": true, "enabled": false }
   ]
 }
 ```
@@ -81,7 +81,7 @@ GET /healthz?dest=name    # single destination
 GET /metrics              # Prometheus-style metrics per destination
 ```
 
-Example homepage widget URL: `http://host:8099/healthz?dest=stavanger`
+Example homepage widget URL: `http://host:8099/healthz?dest=location-1`
 
 ## Suggested rollout
 
